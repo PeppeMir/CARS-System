@@ -1,0 +1,451 @@
+#!/bin/bash
+
+# file: carstat
+   #    \author Giuseppe Miraglia
+   #  Si dichiara che il contenuto di questo file e' in ogni sua parte opera
+   #  originale dell' autore.
+
+## Variabili:
+
+USEA=f
+USEP=f
+USEU=f
+ARGA=
+ARGP=
+ARGU=
+
+## File e directory di supporto:
+
+DIR="tmp"
+APP_FILE1="tmp/app1.txt"
+APP_FILE2="tmp/app2.txt"
+APP_FILE3="tmp/app3.txt"
+
+## Funzioni:
+
+## 
+# no parametri;
+# inserisce in 'VAR1' la città di partenza presente nella rotta 'IN';
+# es: minnie$pluto$PISA$AREZZO$SIENA	inserisce in 'VAR1' PISA.
+##
+
+start_city_str(){
+
+VAR1="${IN#*'$'}"
+VAR1="${VAR1#*'$'}"
+VAR1="${VAR1%%'$'*}"
+
+}
+
+##
+# no parametri;
+# inserisce in 'VAR2' la città destinazione presente nella rotta 'IN';
+# es: minnie$pluto$PISA$AREZZO$SIENA	inserisce in 'VAR1' SIENA.
+##
+
+end_city_str(){
+
+VAR2="${IN##*'$'}"
+
+}
+
+##
+# cerca in tutti gli indici di 'array' se esiste un occorrenza del parametro passato;
+
+# /param $1: elemento da cercare/inserire nell'array;
+# retval 
+# - se "$1" non occorre, lo inserisce nel primo indice libero disponibile;
+# - altrimenti ritorna senza inserirlo;
+
+##
+
+ssearch(){
+
+local TEST=0
+
+for j in ${!array[@]}; do
+	if [ "${array[$j]}" = "$1" ]; then	
+				TEST=1
+				break
+				fi
+		done
+
+if [ $TEST -eq 0 ]; then	#lo inserisco se non è già presente in array
+		array[$i]="$1"		
+		i=$(($i+1))	
+    		   fi	
+}
+
+##
+# no parametri;
+# inserisce in 'APP_inizio' e 'APP_fine' rispettivamente il 1° e il 2° user prelevati dalla rotta 'IN'
+# dopodichè se questi non occorrono già nell'array, li inserisce (vedi su funzione ssearch)
+
+# es: minnie$pluto$PISA$AREZZO$SIENA inserisce in 'APP_inizio' e 'APP_fine' rispettivamente 'minnie' e 'pluto'
+##
+
+ins_array(){
+
+APP_inizio="${IN%%'$'*}"
+APP_fine="${IN#*'$'}"
+APP_fine="${APP_fine%%'$'*}"
+						
+if [ $i -eq 0 ]; then
+
+		array[0]="$APP_inizio"
+		array[1]="$APP_fine"	
+		i=2
+		
+		else
+		ssearch "$APP_inizio"
+		ssearch "$APP_fine"
+		fi
+		
+}
+
+##
+# controlla se il parametro passato è uguale ad uno dei due user presenti nella rotta 'IN':
+# - se è uguale all'user ad inizio rotta, incrementa il contatore 'count_i';
+# - se è uguale al secondo user, incrementa il contatore 'count_f';
+# - altrimenti ritorna semplicemente;
+
+#  /param  $1 l'elemento da confrontare.
+##
+
+check_occ(){
+
+if [ "$1" = "${IN%%'$'*}" ]; then
+			count_i=$(($count_i+1))
+				else
+			VRB="$IN"
+			VRB="${VRB#*'$'}"
+			VRB="${VRB%%'$'*}"
+			if [ "$1" = "$VRB" ]; then
+				count_f=$(($count_f+1))
+						fi
+				fi
+}
+
+##
+# no parametri;
+# conta, nel file $APP_FILE1 e per ogni elemento di 'array', le occorrenze come user di richiesta/offerta (vedi funzione check_occ);
+# alla fine stampa su stdout una stringa della forma "utente:n_offerte_accettate:n_richieste_accettate".
+##
+
+count_occ(){
+
+for i in ${!array[@]}; do
+
+	CAND=${array[$i]}
+	count_i=0
+	count_f=0	
+	exec 5< "$APP_FILE1"
+	while read -u 5 IN; do
+			check_occ "$CAND"
+			done
+	exec 5>&-
+	echo "$CAND:$count_i:$count_f"
+
+	done
+}
+
+##
+# esegue il check per individuare eventuali opzioni non consentite.
+##
+
+check2(){
+
+for ARG in $LIST; do
+		case "$ARG" in
+			( -a ) ;;
+			( -p ) ;;
+			( -u ) ;;
+			( -* ) exit 1;;
+			esac
+		done
+}
+
+##
+# se il numero di file non esistenti è pari al numero di file passati come argomento...
+# param $1 numero di argomenti di carstat
+##
+
+after_NE(){
+
+if [ "$NE" -eq "$1" ]; then	
+		rm -r "$DIR"
+		exit 1
+			fi
+
+}
+
+### 	FINE FUNZIONI		###
+
+# check iniziale: 
+
+if [ "$#" = 0 ]; then
+		exit 1
+		fi
+
+while getopts "a:u:p:" Optn; do		# si aspetta un output composto al massimo da tutte e tre le opzioni (accetta solo -a,-p e -u) e dai loro argomenti
+
+case $OPTARG in
+	( -* ) exit 1;;
+	esac
+
+case $Optn in
+
+	a ) if [ "$USEA" = "f" ]; then	# se viene usata l'opzione "-a", evita la ripetizione dell'opzione settando USEA e salva il suo argomento
+				USEA=t
+				ARGA="$OPTARG"
+			else
+			exit 1
+			fi
+		;;
+
+	u ) if [ "$USEU" = "f" ]; then  # idem per l'opzione "-u"
+				USEU=t
+				ARGU="$OPTARG"
+			else
+			exit 1
+			fi
+		;;
+
+	p ) if [ "$USEP" = "f" ]; then  # idem per l'opzione "-p"
+				USEP=t
+				ARGP="$OPTARG"
+			else
+			exit 1
+			fi
+		;;
+
+	esac
+
+done
+
+
+
+# check per shift e opzioni non consentite : 
+# - controllo se le opzioni sono consentite;
+# - "shifto" i parametri-opzioni e i rispettivi argomenti lasciando soltanto la lista dei file;
+
+if [ -n "$ARGP" -a -n "$ARGA" -a -n "$ARGU" ]; then
+				LIST=$(echo "$1 $3 $5")
+				check2				
+				shift 6
+
+	elif [ -n "$ARGP" -a -n "$ARGA" -o -n "$ARGA" -a -n "$ARGU" -o -n "$ARGU" -a -n "$ARGP" ]; then
+					LIST=$(echo "$1 $3")
+					check2
+					shift 4
+			elif [ -n "$ARGP" -o -n "$ARGA" -o -n "$ARGU" ]; then
+								LIST=$(echo "$1")
+								check2
+								shift 2
+								fi
+
+unset LIST
+
+# se avevo passato soltanto argomenti, senza file, dopo lo shift me ne accorgo ed esco
+
+if [ "$#" = 0 ]; then
+		exit 1
+		fi
+
+mkdir "$DIR"		# directory che conterrà i file di appoggio usati successivamente
+NE=0			# variabile contatore: conta i file passati come argomento che non esistono
+i=0
+
+if [ -n "$ARGU" ]; then		## *** CASO 1 *** : OPZIONE -u ATTIVA ##
+
+	for FILE in "$@"; do	
+
+		if ! [ -f "$FILE" ]; then
+				NE=$(($NE+1)) 
+				   fi		
+
+	# dipendentemente dalle opzioni attive, utilizzando 'grep' inserisco in "$APP_FILE3" i pezzi di $FILE che matchano con gli argomenti	
+	# al termine del for, quindi, tutti i match di file diversi sono unificati su un unico file 
+						
+	grep -w -s "$ARGU" "$FILE" > "$APP_FILE1"
+	
+	if [ -n "$ARGP" ]; then
+		grep -w -s "$ARGP" "$APP_FILE1" > "$APP_FILE2"
+
+		if [ -n "$ARGA" ]; then	 # -u + -a + -p	
+			grep -w -s "$ARGA" "$APP_FILE2" >> "$APP_FILE3"
+				
+				else	# -u + -p
+			cat "$APP_FILE2" >> "$APP_FILE3"
+				fi
+
+	elif [ -n "$ARGA" ]; then  # -u + -a
+		grep -w -s "$ARGA" "$APP_FILE1" > "$APP_FILE2"
+		cat "$APP_FILE2" >> "$APP_FILE3"
+			
+	else	# solo -u
+	cat "$APP_FILE1" >> "$APP_FILE3"
+	fi
+
+	done	
+
+	after_NE "$#"	# se il n° di file passati come argomento e non esistenti è pari al numero dei parametri, exit 1
+
+	if [ -s "$APP_FILE3" ]; then
+			
+			exec 5< "$APP_FILE3"
+			count_i=0
+			count_f=0
+
+			while read -u 5 IN; do
+	
+			# vediamo se ARGA E ARGP sono nelle "posizioni" attese : 
+
+ 			 	 if [ -n "$ARGA" -a -n "$ARGP" ]; then	# -u + -a + -p
+							start_city_str	# calcolo città di partenza --> VAR1
+							end_city_str	# calcolo città di arrivo --> VAR2
+
+							if [ "$VAR1" = "$ARGP" -a "$VAR2" = "$ARGA" ]; then
+												check_occ "$ARGU"	
+													fi
+  				elif [ -z "$ARGP" -a -n "$ARGA" ];then	# -u + -a
+							end_city_str	# calcolo solo città di arrivo --> VAR2
+							if [ "$VAR2" = "$ARGA" ]; then		
+							check_occ "$ARGU"
+									fi
+  
+				elif [ -z "$ARGA" -a -n "$ARGP" ]; then	 # -u + -p
+				 			start_city_str	# calcolo solo città di partenza --> VAR1
+				 			if [ "$VAR1" = "$ARGP" ]; then		
+								check_occ "$ARGU"
+										fi
+
+				 else 	# solo -u
+				 check_occ "$ARGU"
+				 fi
+
+					done
+
+			exec 5>&-
+			echo "$ARGU:$count_i:$count_f"
+			fi
+
+
+
+elif [ -n "$ARGA" ]; then	## *** CASO 2 *** : OPZIONE -a ATTIVA, -u NON ATTIVA ##
+
+	for FILE in "$@"; do
+
+		if ! [ -f $FILE ]; then
+				NE=$(($NE+1)) 
+				   fi
+
+		grep -w -s "$ARGA" "$FILE" > "$APP_FILE1"
+		
+		if [ -n "$ARGP" ]; then
+			grep -w -s "$ARGP" "$APP_FILE1" >> "$APP_FILE2"
+				else
+			cat "$APP_FILE1" >> "$APP_FILE2"
+				fi
+			done	
+		
+	after_NE "$#"
+
+	if [ -s "$APP_FILE2" ]; then
+				
+		exec 5< "$APP_FILE2"
+		rm "$APP_FILE1"
+		touch "$APP_FILE1"
+
+		while read -u 5 IN; do
+	
+		# vediamo se ARGA E ARGP sono nelle "posizioni" attese : 
+
+ 		  if [ -n "$ARGP" ]; then  # -a + -p
+				start_city_str
+				end_city_str
+				if [ "$VAR1" = "$ARGP" -a "$VAR2" = "$ARGA" ]; then
+								ins_array
+								echo "$IN" >> "$APP_FILE1"
+										fi
+  				else	# solo -a
+  				end_city_str
+  				if [ "$VAR2" = "$ARGA" ]; then		
+						    ins_array
+						    echo "$IN" >> "$APP_FILE1"
+							    fi
+  					fi
+
+				done
+
+		exec 5>&-
+	
+		count_occ	# ora conto le occorrenze di ogni elemento di 'array' in "app1.txt"
+		fi
+
+
+	
+elif [ -n "$ARGP" ]; then	## *** CASO 3 *** : OPZIONE -p ATTIVA, -u e -a NON ATTIVE ##
+
+	for FILE in "$@"; do
+		if ! [ -f $FILE ]; then
+				NE=$(($NE+1)) 
+				   fi
+
+		grep -w -s "$ARGP" "$FILE" >> "$APP_FILE2"
+				
+			done
+
+	after_NE "$#"
+	
+	if [ -s "$APP_FILE2" ]; then
+
+			exec 5< "$APP_FILE2"
+
+			while read -u 5 IN; do
+	
+ 				start_city_str
+  			  	if [ "$VAR1" = "$ARGP" ]; then		
+				  			ins_array
+				    			echo "$IN" >> "$APP_FILE1"
+				    			    fi
+							
+					done
+
+			exec 5>&-
+
+			count_occ
+
+			fi
+
+	
+		
+else	## ***CASO 4*** : NESSUNA OPZIONE ATTIVA ##
+	
+	for FILE in "$@"; do
+		
+		if [ -f "$FILE" ]; then
+				exec 5< "$FILE"
+				
+				while read -u 5 IN; do
+				
+						ins_array
+						echo "$IN" >> "$APP_FILE1"		
+
+						done
+
+				exec 5>&-
+				fi
+
+		done
+
+	if ! [ -s "$APP_FILE1" ]; then
+			    rm -r "$DIR"
+			    exit 1
+			    fi
+	count_occ
+
+fi	## fine casi ##
+
+rm -r "$DIR"
+exit 0
